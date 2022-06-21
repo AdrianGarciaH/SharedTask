@@ -4,15 +4,14 @@ import torch
 from torch import cuda
 from torch.utils.data import Dataset, DataLoader
 from transformers import pipeline
-from transformers import AutoTokenizer, AutoModelForTokenClassification
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
 from sklearn.metrics import accuracy_score, classification_report
 from load_data import initialize_data
 from reading_datasets import read_task7
 from labels_to_ids import task7_labels_to_ids
 import time
 import os
-from useful_functions import load_data, save_data
-os.environ["CUDA_VISIBLE_DEVICES"]="100"
+os.environ["CUDA_VISIBLE_DEVICES"]="0"
 
 def train(epoch, training_loader, model, optimizer, device, grad_step = 1, max_grad_norm = 10):
     tr_loss, tr_accuracy = 0, 0
@@ -26,6 +25,9 @@ def train(epoch, training_loader, model, optimizer, device, grad_step = 1, max_g
         ids = batch['input_ids'].to(device, dtype = torch.long)
         mask = batch['attention_mask'].to(device, dtype = torch.long)
         labels = batch['labels'].to(device, dtype = torch.long)
+
+        if (idx + 1) % 20 == 0:
+            print('FINSIHED BATCH:', idx, 'of', len(training_loader))
 
         #loss, tr_logits = model(input_ids=ids, attention_mask=mask, labels=labels)
         output = model(input_ids=ids, attention_mask=mask, labels=labels)
@@ -45,7 +47,7 @@ def train(epoch, training_loader, model, optimizer, device, grad_step = 1, max_g
         
         labels = torch.masked_select(flattened_targets, active_accuracy)
         predictions = torch.masked_select(flattened_predictions, active_accuracy)
-        
+
         tr_labels.extend(labels)
         tr_preds.extend(predictions)
 
@@ -131,26 +133,28 @@ def testing(model, testing_loader, labels_to_ids, device):
 def main(n_epochs, model_name, model_save_flag, model_save_location, model_load_flag, model_load_location):
     #Initialization training parameters
     max_len = 256
-    batch_size = 8
-    grad_step = 4
+    batch_size = 32
+    grad_step = 1
     learning_rate = 1e-05
     initialization_input = (max_len, batch_size)
 
     #Reading datasets and initializing data loaders
     dataset_location = '../Datasets/TASK7/'
-    train_data = read_task7(location, split = 'train')
-    dev_data = read_task7(location, split = 'dev')
-    #test_data = read_task7(location, split = 'dev')#load test set
-    input_data = (train_data, dev_data, task7_labels_to_ids)
+
+    train_data = read_task7(dataset_location , split = 'train')
+    dev_data = read_task7(dataset_location , split = 'dev')
+    #test_data = read_task7(dataset_location , split = 'dev')#load test set
+    labels_to_ids = task7_labels_to_ids
+    input_data = (train_data, dev_data, labels_to_ids)
 
     #Define tokenizer, model and optimizer
     device = 'cuda' if cuda.is_available() else 'cpu' #save the processing time
     if model_load_flag:
         tokenizer = AutoTokenizer.from_pretrained(model_load_location)
-        model = AutoModelForTokenClassification.from_pretrained(model_load_location)
+        model = AutoModelForSequenceClassification.from_pretrained(model_load_location)
     else: 
         tokenizer =  AutoTokenizer.from_pretrained(model_name, add_prefix_space=True)
-        model = AutoModelForTokenClassification.from_pretrained(model_name, num_labels=len(train_labels))
+        model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=len(labels_to_ids))
     optimizer = torch.optim.Adam(params=model.parameters(), lr=learning_rate)
     model.to(device)
 
@@ -172,16 +176,16 @@ def main(n_epochs, model_name, model_save_flag, model_save_location, model_load_
         model = train(epoch, train_loader, model, optimizer, device, grad_step)
         
         #testing and logging
-        labels_dev, predictions_dev, dev_accuracy = testing(model, dev_loader, dev_labels, device)
+        labels_dev, predictions_dev, dev_accuracy = testing(model, dev_loader, labels_to_ids, device)
         print('DEV ACC:', dev_accuracy)
         
-        #labels_test, predictions_test, test_accuracy = testing(model, test_loader, test_labels, device)
+        #labels_test, predictions_test, test_accuracy = testing(model, test_loader, labels_to_ids, device)
         #print('TEST ACC:', test_accuracy)
 
         #saving model
         if dev_accuracy > best_dev_acc:
             best_dev_acc = dev_accuracy
-            best_test_acc = test_accuracy
+            #best_test_acc = test_accuracy
             best_epoch = epoch
             
             if model_save_flag:
@@ -189,12 +193,12 @@ def main(n_epochs, model_name, model_save_flag, model_save_location, model_load_
                 tokenizer.save_pretrained(model_save_location)
                 model.save_pretrained(model_save_location)
 
-        if best_tb_acc < test_accuracy_tb:
+        '''if best_tb_acc < test_accuracy_tb:
             best_tb_acc = test_accuracy_tb
-            best_tb_epoch = epoch
+            best_tb_epoch = epoch'''
 
         now = time.time()
-        print('BEST ACCURACY --> ', 'DEV:', round(best_dev_acc, 5), 'TEST:',  round(best_test_acc, 5))
+        print('BEST ACCURACY --> ', 'DEV:', round(best_dev_acc, 5))
         print('TIME PER EPOCH:', (now-start)/60 )
         print()
 
@@ -205,18 +209,19 @@ def main(n_epochs, model_name, model_save_flag, model_save_location, model_load_
 
 
 if __name__ == '__main__':
-    n_epochs = 25
-    n_iterations = 5
-
+    n_epochs = 10
     models = ['bert-base-uncased', 'roberta-base']
-
+    
     #model saving parameters
-    model_save_flag = True
+    model_save_flag = False
     model_load_flag = False
-    model_save_location = '../../saved_models/' + model_name
-    model_load_location = None
 
-    for model in models:
+
+    for model_name in models:
+
+        model_save_location = '../../saved_models/' + model_name
+        model_load_location = None
+
         best_dev_acc, best_test_acc, best_tb_acc, best_epoch, best_tb_epoch = main(n_epochs, model_name, model_save_flag, model_save_location, model_load_flag, model_load_location)
 
 

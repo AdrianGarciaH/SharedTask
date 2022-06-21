@@ -17,7 +17,7 @@ def read_task7(location, split = 'train'):
         for i, row in enumerate(csv_reader):
             if i > 0:
                 tweet_id = row[0]
-                sentence = row[1]
+                sentence = row[1].strip()
                 label = row[2]
                 data.append((sentence, label))
 

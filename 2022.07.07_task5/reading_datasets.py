@@ -25,7 +25,7 @@ def read_task5(location, split = 'train'):
 
 
 if __name__ == '__main__':
-    location = '../task_5/'
+    location = '../2022.07.07_task5/'
     split = 'train'
     
     data = read_task5(location, split)

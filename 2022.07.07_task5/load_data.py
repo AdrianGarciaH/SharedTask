@@ -14,9 +14,9 @@ class dataset(Dataset):
 
   def __getitem__(self, index):
         # step 1: get the sentence and word labels 
-        sentence = self.data[index][1]
-        #joined_sentnece = ' '.join(sentence)
-        input_label = self.data[index][2]
+        sentence = self.data[index][0]
+        joined_sentnece = ' '.join(sentence)
+        input_label = self.data[index][1]
 
         # step 2: use tokenizer to encode sentence (includes padding/truncation up to max length)
         # BertTokenizerFast provides a handy "return_offsets_mapping" functionality for individual tokens
@@ -41,7 +41,7 @@ class dataset(Dataset):
 
 def initialize_data(tokenizer, initialization_input, input_data, labels_to_ids, shuffle = True):
     max_len, batch_size = initialization_input
-    data = dataset(input_data, tokenizer, labels_to_ids, max_len)
+    data_split = dataset(input_data, tokenizer, labels_to_ids, max_len)
 
 
     params = {'batch_size': batch_size,
@@ -49,7 +49,8 @@ def initialize_data(tokenizer, initialization_input, input_data, labels_to_ids, 
                 'num_workers': 4
                 }
 
-    loader = DataLoader(data, **params)
+    loader = DataLoader(data_split, **params)
+    
 
     return loader
 
